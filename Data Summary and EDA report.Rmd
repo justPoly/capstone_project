@@ -1,0 +1,192 @@
+---
+title: "Data Summary and EDA Report"
+author: "Atalor Polycarp Ehiz"
+date: "2024-12-06"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# **1. Introduction**
+
+This report analyzes clinical and genetic data for children with brain cancer. The goal is to prepare the dataset for machine learning models that predict:
+
+-   **OS.Status (Overall Survival Status):** Whether a patient survived.
+
+-   **DFS.Status (Disease-Free Survival Status):** Whether a patient remained disease-free.
+
+The analysis includes:
+
+Preprocessing: Cleaning the data to ensure quality. Feature Selection: Identifying relevant clinical and genetic variables. Exploratory Data Analysis (EDA): Understanding relationships between variables.
+
+# **2. Description of the Dataset**
+
+### 2.1**Dataset Overview**
+
+-   **Number of Records:** 218
+-   **Number of Features:** 61
+-   **Missing Values:** Yes (handled during preprocessing)
+
+### 2.2 **Variable Types**
+
+-   **Categorical Variables:** Features like Cancer.Type, Treatment, and Tumor.Type.
+-   **Numerical Variables:** Age-related data, mutation counts, and other clinical measurements.
+
+# **3. Preprocessing Steps**
+
+To ensure the dataset is clean and ready for analysis, several preprocessing steps were undertaken.
+
+### **3.1 Handling Missing Values**
+
+-   **Numerical Variables:** Missing values were replaced with the median to preserve the data's distribution.
+
+-   **Categorical Variables:** Missing values were replaced with "Unknown" for consistency.
+
+```{r}
+# Handle Missing Values
+data <- data %>%
+  mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .))) %>%
+  mutate(across(where(is.character), ~ ifelse(is.na(.), "Unknown", .))) %>%
+  mutate(across(where(is.factor), ~ ifelse(is.na(.), as.character(levels(.)[1]), .)))
+
+# Verify no missing values remain
+if (sum(is.na(data)) > 0) {
+  stop("Unresolved missing values in the dataset.")
+}
+```
+
+### **3.2 Feature Cleaning**
+
+-   Column names were trimmed and standardized for compatibility with R functions.
+
+-   All categorical variables were converted into factors.
+
+```{r}
+# Standardize Column Names
+colnames(data) <- trimws(colnames(data))
+colnames(data) <- make.names(colnames(data), unique = TRUE)
+
+# Convert Categorical Variables to Factors
+data <- data %>% mutate(across(where(is.character), as.factor))
+```
+
+### **3.3 Feature Filtering**
+
+-   **Variance Filtering:** Features with low variance (\<0.01) were removed as they add little information.
+
+-   **Correlation Filtering:** Features with high correlation (\>0.8) were removed to reduce redundancy.
+
+```{r}
+# Filter Low-Variance Features
+variances <- apply(data[, sapply(data, is.numeric)], 2, var, na.rm = TRUE)
+data_filtered <- data[, variances > 0.01]
+
+# Remove Highly Correlated Features
+cor_matrix <- cor(data_filtered[, sapply(data_filtered, is.numeric)], use = "complete.obs")
+high_corr <- findCorrelation(cor_matrix, cutoff = 0.8)
+data_filtered <- data_filtered[, -high_corr]
+```
+
+### **3.4 Feature Selection**
+
+Significant features were identified for both OS.Status and DFS.Status using a Chi-square test.
+
+```{r}
+# Chi-Square Test for Feature Selection
+chi_sq_results_OS <- lapply(categorical_columns, function(col) {
+  table_data <- table(data[[col]], data$OS.Status)
+  if (any(dim(table_data) == 0)) {
+    return(data.frame(Feature = col, p_value = NA))
+  }
+  test_result <- chisq.test(table_data)
+  data.frame(Feature = col, p_value = test_result$p.value)
+})
+
+chi_sq_summary_OS <- do.call(rbind, chi_sq_results_OS)
+significant_features_OS <- chi_sq_summary_OS %>% filter(p_value < 0.05)
+```
+
+# 4. Key Insights from EDA
+
+### **4.1 Target Variable Distribution**
+
+The target variables (OS.Status and DFS.Status) show balanced distributions suitable for machine learning.
+
+```{r}
+# OS.Status Distribution
+ggplot(data, aes(x = OS.Status, fill = OS.Status)) +
+  geom_bar() +
+  labs(title = "Distribution of OS.Status", x = "OS.Status", y = "Count") +
+  theme_minimal()
+
+# DFS.Status Distribution
+ggplot(data, aes(x = DFS.Status, fill = DFS.Status)) +
+  geom_bar() +
+  labs(title = "Distribution of DFS.Status", x = "DFS.Status", y = "Count") +
+  theme_minimal()
+```
+
+-   **Insight:** The OS.Status distribution indicates a balanced dataset for survival analysis.
+
+-   **Insight:** The DFS.Status distribution shows similar proportions for patients who remained disease-free and those who relapsed.
+
+### *4.2 Correlation Analysis*
+
+A heatmap was used to visualize correlations among numerical variables. Highly correlated features were excluded.
+
+```{r}
+# Correlation Matrix Visualization
+corrplot(cor_matrix, method = "color", tl.cex = 0.8, number.cex = 0.7, addCoef.col = "black")
+```
+
+-   **Insight:** Some numerical features showed high correlations and were excluded to prevent multicollinearity.
+
+### 4.3 Selected Features
+
+To summarize the features selected for OS.Status and DFS.Status, we present: - A Bar Plot showing the total number of features selected for each target variable. - A Table listing the features categorized as unique to each target variable or common to both.
+
+-   **Features for OS.Status & DFS.Status**
+
+```{r}
+# Create a bar plot
+ggplot(feature_counts, aes(x = Target, y = Features, fill = Target)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black") +
+  geom_text(aes(label = Features), vjust = -0.5, size = 4) +
+  labs(
+    title = "Number of Features Selected for OS.Status and DFS.Status",
+    x = "Target Variable",
+    y = "Number of Features"
+  ) +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2")
+```
+
+-   **Union of Features:**
+
+```{r}
+# Categorize features
+feature_categories <- data.frame(
+  Feature = union(selected_features_OS, selected_features_DFS),
+  Category = ifelse(
+    union(selected_features_OS, selected_features_DFS) %in% intersect(selected_features_OS, selected_features_DFS), "Both",
+    ifelse(union(selected_features_OS, selected_features_DFS) %in% selected_features_OS, "OS.Status", "DFS.Status")
+  )
+)
+
+# Display the table
+knitr::kable(
+  feature_categories,
+  caption = "Feature Categories by Target Variable",
+  col.names = c("Feature Name", "Category")
+)
+```
+
+# Summary
+
+-   Dataset cleaning and preprocessing ensured high data quality.
+-   Significant features were selected for predictive modeling.
+-   EDA revealed balanced target variable distributions and relationships between features.
+
+## End

@@ -1,0 +1,106 @@
+---
+title: "Data Summary and EDA Report"
+author: "Atalor Polycarp Ehiz"
+date: "2024-12-04"
+output: html_document
+---
+
+# **1. Description of the Dataset**
+
+The dataset under analysis focuses on brain cancer-related features. It includes various numerical and categorical variables such as demographic information, treatment types, and clinical outcomes.
+
+-   **Key Variables:**
+    -   `OS.Status`: Overall survival status of patients.
+    -   `DFS.Status`: Disease-free survival status.
+    -   Other demographic and treatment-related attributes.
+
+------------------------------------------------------------------------
+
+# **2. Preprocessing Steps**
+
+```{r preprocess, echo=TRUE}
+# Load required libraries
+library(dplyr)
+library(tidyr)
+library(corrplot)
+library(ggplot2)
+
+# Load the dataset
+data <- read.csv("brain-cancer-dataset.csv")
+```
+
+# Handle missing values
+
+```{r}
+data <- data %>%
+  mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .))) %>%
+  mutate(across(where(is.character), ~ ifelse(is.na(.), "Unknown", .))) %>%
+  mutate(across(where(is.factor), ~ ifelse(is.na(.), as.character(levels(.)[1]), .)))
+
+# Remove low-variance features
+variances <- apply(data[, sapply(data, is.numeric)], 2, var)
+data_filtered <- data[, variances > 0.01]
+
+# Remove highly correlated features
+cor_matrix <- cor(data[, sapply(data, is.numeric)], use = "complete.obs")
+high_corr <- findCorrelation(cor_matrix, cutoff = 0.8, names = FALSE)
+data_filtered <- data[, -high_corr]
+
+# Trim and clean column names
+colnames(data) <- trimws(colnames(data))
+colnames(data) <- make.names(colnames(data), unique = TRUE)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Check missing values
+
+```{r}
+missing_summary <- colSums(is.na(data))
+missing_summary
+```
+
+# Bar plot for OS.Status
+
+```{r}
+ggplot(my_data, aes(x = OS.Status, fill = OS.Status)) +
+  geom_bar() +
+  labs(title = "Distribution of OS.Status", x = "OS.Status", y = "Count") +
+  theme_minimal()
+```
+
+# Bar plot for DFS.Status
+
+```{r}
+ggplot(data, aes(x = DFS.Status, fill = DFS.Status)) +
+  geom_bar() +
+  labs(title = "Distribution of DFS.Status", x = "DFS.Status", y = "Count") +
+  theme_minimal()
+```
+
+# Correlation matrix visualization
+
+```{r}
+cor_matrix <- cor(data[, sapply(data, is.numeric)], use = "complete.obs")
+corrplot(cor_matrix, method = "color", tl.cex = 0.8, number.cex = 0.7, addCoef.col = "black")
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
