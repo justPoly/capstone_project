@@ -1,8 +1,12 @@
 ---
 title: "Data Summary and EDA Report"
 author: "Atalor Polycarp Ehiz"
-date: "2024-12-06"
-output: pdf_document
+date: "2024-11-27"
+output:
+  word_document: default
+  pdf_document: default
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -45,13 +49,13 @@ To ensure the dataset is clean and ready for analysis, several preprocessing ste
 -   **Categorical Variables:** Missing values were replaced with "Unknown" for consistency.
 
 ```{r}
-# Handle Missing Values
+#Handle Missing Values
 data <- data %>%
   mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .))) %>%
   mutate(across(where(is.character), ~ ifelse(is.na(.), "Unknown", .))) %>%
   mutate(across(where(is.factor), ~ ifelse(is.na(.), as.character(levels(.)[1]), .)))
 
-# Verify no missing values remain
+#Verify no missing values remain
 if (sum(is.na(data)) > 0) {
   stop("Unresolved missing values in the dataset.")
 }

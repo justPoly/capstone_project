@@ -5,8 +5,7 @@ library(corrplot)
 library(caret)  # For findCorrelation()
 library(stats)  # For Chi-square test
 library(ggplot2)
-library(vennDiagram) # Load VennDiagram library
-
+library(tinytex)
 # Load data
 data <- read.csv("brain-cancer-dataset.csv")
 
@@ -95,6 +94,10 @@ significant_features_DFS <- chi_sq_summary_DFS %>% filter(p_value < 0.05)
 # Subset data for significant features
 data_OS <- data %>% select(all_of(significant_features_OS$Feature), OS.Status)
 data_DFS <- data %>% select(all_of(significant_features_DFS$Feature), DFS.Status)
+
+# Extract selected features
+selected_features_OS <- colnames(data_OS)[colnames(data_OS) != "OS.Status"]
+selected_features_DFS <- colnames(data_DFS)[colnames(data_DFS) != "DFS.Status"]
 
 # Visualize distributions
 ggplot(data, aes(x = OS.Status, fill = OS.Status)) +
