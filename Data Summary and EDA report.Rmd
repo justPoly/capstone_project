@@ -1,36 +1,47 @@
 ---
-title: "Data Summary and EDA Report"
+title: "Personalizing Radiotherapy Protocols in Brain Cancer Treatment Through Patient 
+Clinical and Genetic Data with Machine Learning."
 author: "Atalor Polycarp Ehiz"
 date: "2024-11-27"
 output:
   word_document: default
-  pdf_document: default
   html_document:
     df_print: paged
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+  knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+  # Load necessary libraries
+  library(dplyr)
+  library(ggplot2)
+  library(corrplot)
+  library(caret) 
+  library(stats) 
+  library(tidyverse)
+  library(knitr)
 ```
 
+# Import Data
+````{r}
+     my_data <- read.csv("brain-cancer-dataset.csv")
+````
 # **1. Introduction**
 
-This report analyzes clinical and genetic data for children with brain cancer. The goal is to prepare the dataset for machine learning models that predict:
+This report provides a comprehensive analysis of a brain cancer dataset, with a particular focus on the clinical and genetic data of children diagnosed with brain cancer.  The goal is to prepare the dataset for machine learning models that predict:
 
 -   **OS.Status (Overall Survival Status):** Whether a patient survived.
 
 -   **DFS.Status (Disease-Free Survival Status):** Whether a patient remained disease-free.
 
-The analysis includes:
-
-Preprocessing: Cleaning the data to ensure quality. Feature Selection: Identifying relevant clinical and genetic variables. Exploratory Data Analysis (EDA): Understanding relationships between variables.
+Here’s a breakdown of the steps taken:
 
 # **2. Description of the Dataset**
 
 ### 2.1**Dataset Overview**
 
--   **Number of Records:** 218
--   **Number of Features:** 61
+-   **Number of Records:** 218 patient records.
+-   **Number of Features:** 61 features, including clinical and genetic data.
 -   **Missing Values:** Yes (handled during preprocessing)
 
 ### 2.2 **Variable Types**
@@ -40,52 +51,54 @@ Preprocessing: Cleaning the data to ensure quality. Feature Selection: Identifyi
 
 # **3. Preprocessing Steps**
 
-To ensure the dataset is clean and ready for analysis, several preprocessing steps were undertaken.
+Before analyzing the data, it’s crucial to ensure the dataset is clean and suitable for analysis. This section explains how missing values, inconsistent column names, and redundant features were handled.
 
 ### **3.1 Handling Missing Values**
+
+Missing values can disrupt the quality of a dataset. In this case:
 
 -   **Numerical Variables:** Missing values were replaced with the median to preserve the data's distribution.
 
 -   **Categorical Variables:** Missing values were replaced with "Unknown" for consistency.
 
-```{r}
-#Handle Missing Values
-data <- data %>%
+`````{r}
+# Handle Missing Values
+my_data <- my_data %>%
   mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .))) %>%
   mutate(across(where(is.character), ~ ifelse(is.na(.), "Unknown", .))) %>%
   mutate(across(where(is.factor), ~ ifelse(is.na(.), as.character(levels(.)[1]), .)))
 
-#Verify no missing values remain
-if (sum(is.na(data)) > 0) {
+# Verify no missing values remain
+if (sum(is.na(my_data)) > 0) {
   stop("Unresolved missing values in the dataset.")
 }
-```
+`````
 
 ### **3.2 Feature Cleaning**
 
 -   Column names were trimmed and standardized for compatibility with R functions.
 
--   All categorical variables were converted into factors.
+-   All categorical variables were converted into factors to help with later analysis and modeling.
 
 ```{r}
 # Standardize Column Names
-colnames(data) <- trimws(colnames(data))
-colnames(data) <- make.names(colnames(data), unique = TRUE)
+colnames(my_data) <- trimws(colnames(my_data))
+colnames(my_data) <- make.names(colnames(my_data), unique = TRUE)
 
 # Convert Categorical Variables to Factors
-data <- data %>% mutate(across(where(is.character), as.factor))
+my_data <- my_data %>% mutate(across(where(is.character), as.factor))
 ```
 
 ### **3.3 Feature Filtering**
 
--   **Variance Filtering:** Features with low variance (\<0.01) were removed as they add little information.
+-   **Variance Filtering:** Features that had very low variance (less than 1% variation across data) were removed, as they are unlikely to be useful in predictive models.
 
--   **Correlation Filtering:** Features with high correlation (\>0.8) were removed to reduce redundancy.
+-   **Correlation Filtering:** Features that were highly correlated (greater than 0.8 correlation) were removed to reduce redundancy. This step helps avoid issues like multicollinearity, which can confuse models.
 
 ```{r}
 # Filter Low-Variance Features
-variances <- apply(data[, sapply(data, is.numeric)], 2, var, na.rm = TRUE)
-data_filtered <- data[, variances > 0.01]
+variances <- apply(my_data[, sapply(my_data, is.numeric)], 2, var, na.rm = TRUE)
+data_filtered <- my_data[, variances > 0.01]
 
 # Remove Highly Correlated Features
 cor_matrix <- cor(data_filtered[, sapply(data_filtered, is.numeric)], use = "complete.obs")
@@ -95,12 +108,35 @@ data_filtered <- data_filtered[, -high_corr]
 
 ### **3.4 Feature Selection**
 
+For predictive modeling, there is need to select the most relevant features. Chi-Square tests were used to identify categorical variables that are significantly associated with the target variables OS.Status and DFS.Status.
+
+The following categorical variables were selected for analysis, These variables represent distinct groups or categories and will be used to explore their associations with patient prognosis.
+
+````{r}
+   # Define categorical columns
+categorical_columns <- c(
+  "Study.ID", "Patient.ID", "Sample.ID", "Age.Class", "BRAF_RELA.Status", 
+  "BRAF.Status", "BRAF.Status2", "Cancer.Predispositions", "Cancer.Type", 
+  "Cancer.Type.Detailed", "Chemotherapy", "Chemotherapy.Agents", 
+  "Chemotherapy.Type", "Clinical.Status.at.Collection.Event", 
+  "CTNNB1.Status", "DFS.Status", "Ethnicity", "Extent.of.Tumor.Resection", 
+  "External.Patient.ID", "Formulation", "H3F3A_CTNNB1.Status", 
+  "Initial.CNS.Tumor.Diagnosis.Related.to.OS", "Initial.Diagnosis.Type", 
+  "LGG_BRAF.Status", "Medical.Conditions", "Multiple.Cancer.Predispositions", 
+  "Multiple.Medical.Conditions", "Multiple.Tumor.Locations", "Oncotree.Code", 
+  "OS.Status", "Protocol.and.Treatment.Arm", "Race", "Radiation", 
+  "Radiation.Site", "Radiation.Type", "Sample.Annotation", "Sample.Origin", 
+  "Sex", "Surgery", "Treatment", "Treatment.Changed", "Treatment.Status", 
+  "Tumor.Location.Condensed", "Tumor.Tissue.Site", "Tumor.Type", "Updated.Grade"
+)
+````
+
 Significant features were identified for both OS.Status and DFS.Status using a Chi-square test.
 
 ```{r}
 # Chi-Square Test for Feature Selection
 chi_sq_results_OS <- lapply(categorical_columns, function(col) {
-  table_data <- table(data[[col]], data$OS.Status)
+  table_data <- table(my_data[[col]], my_data$OS.Status)
   if (any(dim(table_data) == 0)) {
     return(data.frame(Feature = col, p_value = NA))
   }
@@ -112,21 +148,23 @@ chi_sq_summary_OS <- do.call(rbind, chi_sq_results_OS)
 significant_features_OS <- chi_sq_summary_OS %>% filter(p_value < 0.05)
 ```
 
-# 4. Key Insights from EDA
+# 4. Key Insights from Exploratory Data Analysis 
+
+EDA helps to understand the data and its relationships, providing insights that can guide further analysis and modeling.
 
 ### **4.1 Target Variable Distribution**
 
-The target variables (OS.Status and DFS.Status) show balanced distributions suitable for machine learning.
+The distribution of OS.Status and DFS.Status was checked using bar plots. Both variables showed balanced distributions, which is crucial for developing a reliable machine learning model.
 
 ```{r}
 # OS.Status Distribution
-ggplot(data, aes(x = OS.Status, fill = OS.Status)) +
+ggplot(my_data, aes(x = OS.Status, fill = OS.Status)) +
   geom_bar() +
   labs(title = "Distribution of OS.Status", x = "OS.Status", y = "Count") +
   theme_minimal()
 
 # DFS.Status Distribution
-ggplot(data, aes(x = DFS.Status, fill = DFS.Status)) +
+ggplot(my_data, aes(x = DFS.Status, fill = DFS.Status)) +
   geom_bar() +
   labs(title = "Distribution of DFS.Status", x = "DFS.Status", y = "Count") +
   theme_minimal()
@@ -136,7 +174,9 @@ ggplot(data, aes(x = DFS.Status, fill = DFS.Status)) +
 
 -   **Insight:** The DFS.Status distribution shows similar proportions for patients who remained disease-free and those who relapsed.
 
-### *4.2 Correlation Analysis*
+### 4.2 Correlation Analysis
+
+A correlation matrix was created to visualize relationships between numerical variables. This helped in understanding how variables relate to each other and where correlations are strong enough to potentially affect model performance. 
 
 A heatmap was used to visualize correlations among numerical variables. Highly correlated features were excluded.
 
@@ -151,7 +191,72 @@ corrplot(cor_matrix, method = "color", tl.cex = 0.8, number.cex = 0.7, addCoef.c
 
 To summarize the features selected for OS.Status and DFS.Status, we present: - A Bar Plot showing the total number of features selected for each target variable. - A Table listing the features categorized as unique to each target variable or common to both.
 
--   **Features for OS.Status & DFS.Status**
+#### Features for OS.Status & DFS.Status
+
+**Chi-Square Test for Feature Significance**
+
+The chi-square tests were performed to evaluate the relationship between categorical features and the target variables, OS.Status and DFS.Status. For each feature in the categorical_columns, contingency tables were created between the feature and the target variable. The resulting p-values were computed to assess the statistical significance of each feature in relation to the target variables.
+
+````{r}
+# Chi-square test for OS.Status and DFS.Status
+chi_sq_results_OS <- lapply(categorical_columns, function(col) {
+  table_data <- table(my_data[[col]], my_data$OS.Status)
+  if (any(dim(table_data) == 0)) {
+    return(data.frame(Feature = col, p_value = NA))
+  }
+  test_result <- chisq.test(table_data)
+  data.frame(Feature = col, p_value = test_result$p.value)
+})
+
+chi_sq_summary_OS <- do.call(rbind, chi_sq_results_OS)
+
+chi_sq_results_DFS <- lapply(categorical_columns, function(col) {
+  table_data <- table(my_data[[col]], my_data$DFS.Status)
+  if (any(dim(table_data) == 0)) {
+    return(data.frame(Feature = col, p_value = NA))
+  }
+  test_result <- chisq.test(table_data)
+  data.frame(Feature = col, p_value = test_result$p.value)
+})
+
+chi_sq_summary_DFS <- do.call(rbind, chi_sq_results_DFS)
+````
+
+
+**Filtering Significant Features**
+
+Features with p-values less than 0.05 were considered statistically significant and were selected for further analysis. These significant features were extracted from the chi-square test results for both OS.Status and DFS.Status. The dataset was then subset to include only these significant features, resulting in two datasets: data_OS for OS.Status and data_DFS for DFS.Status.
+
+````{r}
+# Filter significant features for OS.Status and DFS.Status
+significant_features_OS <- chi_sq_summary_OS %>% filter(p_value < 0.05)
+significant_features_DFS <- chi_sq_summary_DFS %>% filter(p_value < 0.05)
+
+# Subset data for significant features
+data_OS <- my_data %>% select(all_of(significant_features_OS$Feature), OS.Status)
+data_DFS <- my_data %>% select(all_of(significant_features_DFS$Feature), DFS.Status)
+````
+
+**Feature Count Summary**
+
+The selected features for OS.Status and DFS.Status were extracted, excluding the target variable itself. A summary was created to report the number of significant features for each target variable, as well as the number of common features between OS.Status and DFS.Status.
+
+````{r}
+# Extract selected features
+selected_features_OS <- colnames(data_OS)[colnames(data_OS) != "OS.Status"]
+selected_features_DFS <- colnames(data_DFS)[colnames(data_DFS) != "DFS.Status"]
+
+# Create a summary of feature counts
+feature_counts <- data.frame(
+  Target = c("OS.Status", "DFS.Status"),
+  Features = c(length(selected_features_OS), length(selected_features_DFS)),
+  Common = length(intersect(selected_features_OS, selected_features_DFS))
+)
+````
+
+**Visualization of Selected Features**
+
+A bar plot was generated to visualize the number of significant features selected for OS.Status and DFS.Status. The plot was created using the geom_bar() function to display the counts of features, with labels added through geom_text(). The plot includes a clear title, axis labels, and a minimal theme, utilizing a color palette for better visual clarity.
 
 ```{r}
 # Create a bar plot
@@ -168,6 +273,15 @@ ggplot(feature_counts, aes(x = Target, y = Features, fill = Target)) +
 ```
 
 -   **Union of Features:**
+
+To explore the relationship between the selected features for OS.Status and DFS.Status, the union of the features was computed. A new table was created to categorize each feature based on its presence in either or both target variables.
+
+The features were categorized as follows:
+
+"Both": Features present in both OS.Status and DFS.Status.
+"OS.Status": Features that are exclusive to OS.Status.
+"DFS.Status": Features that are exclusive to DFS.Status.
+The categorized features were then displayed in a table for better visualization and clarity.
 
 ```{r}
 # Categorize features
@@ -189,8 +303,9 @@ knitr::kable(
 
 # Summary
 
--   Dataset cleaning and preprocessing ensured high data quality.
--   Significant features were selected for predictive modeling.
--   EDA revealed balanced target variable distributions and relationships between features.
+- Preprocessing: Missing values were handled, column names standardized, and irrelevant features removed.
 
+- Feature Selection: Chi-Square tests helped identify the most significant features for predicting OS.Status and DFS.Status.
+
+- Exploratory Data Analysis: Revealed balanced target variable distributions and correlations among features.
 ## End

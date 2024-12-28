@@ -6,26 +6,30 @@ library(caret)  # For findCorrelation()
 library(stats)  # For Chi-square test
 library(ggplot2)
 library(tinytex)
+library(quarto)
+library(knitr)
+library(tidyverse)
+
 # Load data
-data <- read.csv("brain-cancer-dataset.csv")
+my_data <- read.csv("brain-cancer-dataset.csv")
 
 # Handle missing values
-data <- data %>%
+my_data <- my_data %>%
   mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .))) %>%
   mutate(across(where(is.character), ~ ifelse(is.na(.), "Unknown", .))) %>%
   mutate(across(where(is.factor), ~ ifelse(is.na(.), as.character(levels(.)[1]), .)))
 
 # Check for any remaining missing values
-if (sum(is.na(data)) > 0) {
+if (sum(is.na(my_data)) > 0) {
   stop("Unresolved missing values in the dataset.")
 }
 
 # Convert categorical variables to factors
-data <- data %>% mutate(across(where(is.character), as.factor))
+my_data <- my_data %>% mutate(across(where(is.character), as.factor))
 
 # Calculate variance for numeric columns and filter
-variances <- apply(data[, sapply(data, is.numeric)], 2, var, na.rm = TRUE)
-data_filtered <- data[, variances > 0.01]
+variances <- apply(my_data[, sapply(my_data, is.numeric)], 2, var, na.rm = TRUE)
+data_filtered <- my_data[, variances > 0.01]
 
 # Compute and visualize correlation matrix
 cor_matrix <- cor(data_filtered[, sapply(data_filtered, is.numeric)], use = "complete.obs")
@@ -36,12 +40,12 @@ high_corr <- findCorrelation(cor_matrix, cutoff = 0.8)
 data_filtered <- data_filtered[, -high_corr]
 
 # Trim and clean column names
-colnames(data) <- trimws(colnames(data))
-colnames(data) <- make.names(colnames(data), unique = TRUE)
+colnames(my_data) <- trimws(colnames(my_data))
+colnames(my_data) <- make.names(colnames(my_data), unique = TRUE)
 
 # Ensure factors for specific columns
-data$OS.Status <- as.factor(data$OS.Status)
-data$DFS.Status <- as.factor(data$DFS.Status)
+my_data$OS.Status <- as.factor(my_data$OS.Status)
+my_data$DFS.Status <- as.factor(my_data$DFS.Status)
 
 # Define categorical columns
 categorical_columns <- c(
@@ -61,12 +65,12 @@ categorical_columns <- c(
 )
 
 # Ensure all categorical columns are factors
-data <- data %>%
+my_data <- my_data %>%
   mutate(across(all_of(categorical_columns), as.factor))
 
 # Chi-square test for OS.Status and DFS.Status
 chi_sq_results_OS <- lapply(categorical_columns, function(col) {
-  table_data <- table(data[[col]], data$OS.Status)
+  table_data <- table(my_data[[col]], my_data$OS.Status)
   if (any(dim(table_data) == 0)) {
     return(data.frame(Feature = col, p_value = NA))
   }
@@ -77,7 +81,7 @@ chi_sq_results_OS <- lapply(categorical_columns, function(col) {
 chi_sq_summary_OS <- do.call(rbind, chi_sq_results_OS)
 
 chi_sq_results_DFS <- lapply(categorical_columns, function(col) {
-  table_data <- table(data[[col]], data$DFS.Status)
+  table_data <- table(my_data[[col]], my_data$DFS.Status)
   if (any(dim(table_data) == 0)) {
     return(data.frame(Feature = col, p_value = NA))
   }
@@ -92,20 +96,20 @@ significant_features_OS <- chi_sq_summary_OS %>% filter(p_value < 0.05)
 significant_features_DFS <- chi_sq_summary_DFS %>% filter(p_value < 0.05)
 
 # Subset data for significant features
-data_OS <- data %>% select(all_of(significant_features_OS$Feature), OS.Status)
-data_DFS <- data %>% select(all_of(significant_features_DFS$Feature), DFS.Status)
+data_OS <- my_data %>% select(all_of(significant_features_OS$Feature), OS.Status)
+data_DFS <- my_data %>% select(all_of(significant_features_DFS$Feature), DFS.Status)
 
 # Extract selected features
 selected_features_OS <- colnames(data_OS)[colnames(data_OS) != "OS.Status"]
 selected_features_DFS <- colnames(data_DFS)[colnames(data_DFS) != "DFS.Status"]
 
 # Visualize distributions
-ggplot(data, aes(x = OS.Status, fill = OS.Status)) +
+ggplot(my_data, aes(x = OS.Status, fill = OS.Status)) +
   geom_bar() +
   labs(title = "Distribution of OS.Status", x = "OS.Status", y = "Count") +
   theme_minimal()
 
-ggplot(data, aes(x = DFS.Status, fill = DFS.Status)) +
+ggplot(my_data, aes(x = DFS.Status, fill = DFS.Status)) +
   geom_bar() +
   labs(title = "Distribution of DFS.Status", x = "DFS.Status", y = "Count") +
   theme_minimal()
@@ -115,11 +119,11 @@ normalize <- function(x) {
   (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
 }
 
-numeric_cols <- names(data)[sapply(data, is.numeric)]
-data[numeric_cols] <- lapply(data[numeric_cols], normalize)
+numeric_cols <- names(my_data)[sapply(my_data, is.numeric)]
+my_data[numeric_cols] <- lapply(my_data[numeric_cols], normalize)
 
 # Visualize correlation matrix
-cor_matrix <- cor(data[numeric_cols], use = "complete.obs")
+cor_matrix <- cor(my_data[numeric_cols], use = "complete.obs")
 corrplot(cor_matrix, method = "color", tl.cex = 0.8, number.cex = 0.7, addCoef.col = "black")
 
 # Create a summary of feature counts
@@ -157,5 +161,3 @@ knitr::kable(
   caption = "Feature Categories by Target Variable",
   col.names = c("Feature Name", "Category")
 )
-
-
