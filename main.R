@@ -9,6 +9,8 @@ library(tinytex)
 library(quarto)
 library(knitr)
 library(tidyverse)
+library(pROC)
+library(glmnet)
 
 # Load data
 my_data <- read.csv("brain-cancer-dataset.csv")
@@ -161,3 +163,301 @@ knitr::kable(
   caption = "Feature Categories by Target Variable",
   col.names = c("Feature Name", "Category")
 )
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Split the data for OS.Status (80% for training, 20% for testing)
+train_OS <- createDataPartition(data_OS$OS.Status, p = 0.8, list = FALSE)
+train_OS_data <- data_OS[train_OS, ]
+test_OS_data <- data_OS[-train_OS, ]
+
+# Identify columns with only one level (factor columns)
+single_level_factors <- sapply(train_OS_data, function(x) is.factor(x) && length(unique(x)) == 1)
+single_level_columns <- names(single_level_factors[single_level_factors])
+print(single_level_columns)
+
+# Remove columns with only one level
+train_OS_data <- train_OS_data[, !colnames(train_OS_data) %in% single_level_columns]
+
+# Set up the training control
+train_control <- trainControl(method = "cv", number = 10)
+
+# Train the logistic regression model
+model_logistic_OS <- train(OS.Status ~ ., data = train_OS_data, method = "glm", family = "binomial", trControl = train_control)
+
+# Check model summary
+summary(model_logistic_OS)
+
+# Predict on the training data
+predictions_train <- predict(model_logistic_OS, newdata = train_OS_data)
+
+# Confusion matrix to evaluate performance
+conf_matrix_train <- confusionMatrix(predictions_train, train_OS_data$OS.Status)
+print(conf_matrix_train)
+
+# Predict on the test data
+predictions_test <- predict(model_logistic_OS, newdata = test_OS_data)
+
+# Confusion matrix to evaluate performance on the test data
+conf_matrix_test <- confusionMatrix(predictions_test, test_OS_data$OS.Status)
+print(conf_matrix_test)
+
+# Feature importance
+feature_importance <- varImp(model_logistic_OS, scale = FALSE)
+
+# Print feature importance
+print(feature_importance)
+
+# Plot feature importance
+plot(feature_importance)
+
+# Cross-validation results
+cv_results <- model_logistic_OS$resample
+print(cv_results)
+
+# Plot cross-validation results
+ggplot(cv_results, aes(x = Resample, y = Accuracy)) +
+  geom_boxplot() +
+  labs(title = "Cross-validation Results - Accuracy", y = "Accuracy", x = "Fold") +
+  theme_minimal()
+
+# Get predicted probabilities (needed for ROC curve)
+probabilities <- predict(model_logistic_OS, newdata = train_OS_data, type = "prob")[, 2]
+
+# ROC curve and AUC
+roc_curve <- roc(train_OS_data$OS.Status, probabilities)
+plot(roc_curve, main = "ROC Curve for OS.Status", col = "blue")
+auc(roc_curve)  # This will give you the AUC value
+
+# Example of hyperparameter tuning for logistic regression using `caret`
+tune_grid <- expand.grid(alpha = 0:1, lambda = seq(0, 1, by = 0.1))
+
+model_tuned <- train(OS.Status ~ ., data = train_OS_data, method = "glmnet", 
+                     trControl = train_control, tuneGrid = tune_grid, family = "binomial")
+
+# Save the final model for later use
+saveRDS(model_logistic_OS, "model_logistic_OS.rds")
+
+# Load the model (when needed)
+# model_logistic_OS <- readRDS("model_logistic_OS.rds")
+
+# Split the data for DFS.Status (80% for training, 20% for testing)
+train_DFS <- createDataPartition(data_DFS$DFS.Status, p = 0.8, list = FALSE)
+train_DFS_data <- data_DFS[train_DFS, ]
+test_DFS_data <- data_DFS[-train_DFS, ]
+
+# Identify columns with only one level (factor columns)
+single_level_factors_DFS <- sapply(train_DFS_data, function(x) is.factor(x) && length(unique(x)) == 1)
+single_level_columns_DFS <- names(single_level_factors_DFS[single_level_factors_DFS])
+print(single_level_columns_DFS)
+
+# Remove columns with only one level
+train_DFS_data <- train_DFS_data[, !colnames(train_DFS_data) %in% single_level_columns_DFS]
+
+# Set up the training control for DFS.Status
+train_control_DFS <- trainControl(method = "cv", number = 10)
+
+# Train the logistic regression model for DFS.Status
+model_logistic_DFS <- train(DFS.Status ~ ., data = train_DFS_data, method = "glm", family = "binomial", trControl = train_control_DFS)
+
+# Check model summary for DFS.Status
+summary(model_logistic_DFS)
+
+# Predict on the training data for DFS.Status
+predictions_train_DFS <- predict(model_logistic_DFS, newdata = train_DFS_data)
+
+# Confusion matrix to evaluate performance on training data for DFS.Status
+conf_matrix_train_DFS <- confusionMatrix(predictions_train_DFS, train_DFS_data$DFS.Status)
+print(conf_matrix_train_DFS)
+
+# Predict on the test data for DFS.Status
+predictions_test_DFS <- predict(model_logistic_DFS, newdata = test_DFS_data)
+
+# Confusion matrix to evaluate performance on test data for DFS.Status
+conf_matrix_test_DFS <- confusionMatrix(predictions_test_DFS, test_DFS_data$DFS.Status)
+print(conf_matrix_test_DFS)
+
+# Feature importance for DFS.Status
+feature_importance_DFS <- varImp(model_logistic_DFS, scale = FALSE)
+
+# Print feature importance for DFS.Status
+print(feature_importance_DFS)
+
+# Plot feature importance for DFS.Status
+plot(feature_importance_DFS)
+
+# Cross-validation results for DFS.Status
+cv_results_DFS <- model_logistic_DFS$resample
+print(cv_results_DFS)
+
+# Plot cross-validation results for DFS.Status
+ggplot(cv_results_DFS, aes(x = Resample, y = Accuracy)) +
+  geom_boxplot() +
+  labs(title = "Cross-validation Results - Accuracy (DFS.Status)", y = "Accuracy", x = "Fold") +
+  theme_minimal()
+
+# Get predicted probabilities for DFS.Status (needed for ROC curve)
+probabilities_DFS <- predict(model_logistic_DFS, newdata = train_DFS_data, type = "prob")[, 2]
+
+# ROC curve and AUC for DFS.Status
+roc_curve_DFS <- roc(train_DFS_data$DFS.Status, probabilities_DFS)
+plot(roc_curve_DFS, main = "ROC Curve for DFS.Status", col = "blue")
+auc(roc_curve_DFS)  # This will give you the AUC value
+
+# Hyperparameter tuning for DFS.Status using glmnet
+tune_grid_DFS <- expand.grid(alpha = 0:1, lambda = seq(0, 1, by = 0.1))
+
+model_tuned_DFS <- train(DFS.Status ~ ., data = train_DFS_data, method = "glmnet", 
+                         trControl = train_control_DFS, tuneGrid = tune_grid_DFS, family = "binomial")
+
+#--Save Model here
+# Save the final DFS.Status model
+saveRDS(model_logistic_DFS, "model_logistic_DFS.rds")
+
+# Load the model (when needed)
+# model_logistic_DFS <- readRDS("model_logistic_DFS.rds")
+
+# Train Random Forest model for OS.Status
+model_rf_OS <- train(OS.Status ~ ., data = train_OS_data, method = "rf", trControl = train_control)
+
+# Check model summary for Random Forest
+summary(model_rf_OS)
+
+# Get model evaluation results for Random Forest
+print(model_rf_OS)
+
+# Predict on the training data (or test data)
+predictions_rf_OS <- predict(model_rf_OS, newdata = train_OS_data)
+
+# Confusion matrix to evaluate Random Forest performance
+conf_matrix_rf_OS <- confusionMatrix(predictions_rf_OS, train_OS_data$OS.Status)
+print(conf_matrix_rf_OS)
+
+# Plot feature importance for Random Forest
+feature_importance_rf <- varImp(model_rf_OS, scale = FALSE)
+print(feature_importance_rf)
+plot(feature_importance_rf)
+
+# Cross-validation results for Random Forest
+cv_results_rf <- model_rf_OS$resample
+print(cv_results_rf)
+
+# Plot cross-validation results for Random Forest
+ggplot(cv_results_rf, aes(x = Resample, y = Accuracy)) +
+  geom_boxplot() +
+  labs(title = "Cross-validation Results - Accuracy (Random Forest)", y = "Accuracy", x = "Fold") +
+  theme_minimal()
+
+# ROC curve and AUC for Random Forest
+probabilities_rf <- predict(model_rf_OS, newdata = train_OS_data, type = "prob")[, 2]
+roc_curve_rf <- roc(train_OS_data$OS.Status, probabilities_rf)
+plot(roc_curve_rf, main = "ROC Curve for OS.Status (Random Forest)", col = "blue")
+auc(roc_curve_rf)  # This will give you the AUC value
+
+# Train Random Forest model for DFS.Status
+model_rf_DFS <- train(DFS.Status ~ ., data = train_DFS_data, method = "rf", trControl = train_control)
+
+# Check model summary for Random Forest
+summary(model_rf_DFS)
+
+# Get model evaluation results for Random Forest
+print(model_rf_DFS)
+
+# Predict on the training data (or test data)
+predictions_rf_DFS <- predict(model_rf_DFS, newdata = train_DFS_data)
+
+# Confusion matrix to evaluate Random Forest performance
+conf_matrix_rf_DFS <- confusionMatrix(predictions_rf_DFS, train_DFS_data$DFS.Status)
+print(conf_matrix_rf_DFS)
+
+# Plot feature importance for Random Forest
+feature_importance_rf_DFS <- varImp(model_rf_DFS, scale = FALSE)
+print(feature_importance_rf_DFS)
+plot(feature_importance_rf_DFS)
+
+# Cross-validation results for Random Forest
+cv_results_rf_DFS <- model_rf_DFS$resample
+print(cv_results_rf_DFS)
+
+# Plot cross-validation results for Random Forest
+ggplot(cv_results_rf_DFS, aes(x = Resample, y = Accuracy)) +
+  geom_boxplot() +
+  labs(title = "Cross-validation Results - Accuracy (Random Forest for DFS)", y = "Accuracy", x = "Fold") +
+  theme_minimal()
+
+# ROC curve and AUC for Random Forest
+probabilities_rf_DFS <- predict(model_rf_DFS, newdata = train_DFS_data, type = "prob")[, 2]
+roc_curve_rf_DFS <- roc(train_DFS_data$DFS.Status, probabilities_rf_DFS)
+plot(roc_curve_rf_DFS, main = "ROC Curve for DFS.Status (Random Forest)", col = "blue")
+auc(roc_curve_rf_DFS)  # This will give you the AUC value
+
+# Compare Logistic Regression and Random Forest for OS.Status
+model_comparison_OS <- data.frame(
+  Model = c("Logistic Regression", "Random Forest"),
+  Accuracy = c(conf_matrix$overall['Accuracy'], conf_matrix_rf_OS$overall['Accuracy']),
+  AUC = c(auc(roc_curve), auc(roc_curve_rf))
+)
+
+print(model_comparison_OS)
+
+# Compare Logistic Regression and Random Forest for DFS.Status
+model_comparison_DFS <- data.frame(
+  Model = c("Logistic Regression", "Random Forest"),
+  Accuracy = c(conf_matrix_train_DFS$overall['Accuracy'], conf_matrix_rf_DFS$overall['Accuracy']),
+  AUC = c(auc(roc_curve_DFS), auc(roc_curve_rf_DFS))
+)
+
+print(model_comparison_DFS)
+
+# Predictions on the test data for OS.Status (Logistic Regression)
+predictions_test_OS_logistic <- predict(model_logistic_OS, newdata = test_OS_data)
+conf_matrix_test_OS_logistic <- confusionMatrix(predictions_test_OS_logistic, test_OS_data$OS.Status)
+print(conf_matrix_test_OS_logistic)
+
+# Predictions on the test data for OS.Status (Random Forest)
+predictions_test_OS_rf <- predict(model_rf_OS, newdata = test_OS_data)
+conf_matrix_test_OS_rf <- confusionMatrix(predictions_test_OS_rf, test_OS_data$OS.Status)
+print(conf_matrix_test_OS_rf)
+
+# Predictions on the test data for DFS.Status (Logistic Regression)
+predictions_test_DFS_logistic <- predict(model_logistic_DFS, newdata = test_DFS_data)
+conf_matrix_test_DFS_logistic <- confusionMatrix(predictions_test_DFS_logistic, test_DFS_data$DFS.Status)
+print(conf_matrix_test_DFS_logistic)
+
+# Predictions on the test data for DFS.Status (Random Forest)
+predictions_test_DFS_rf <- predict(model_rf_DFS, newdata = test_DFS_data)
+conf_matrix_test_DFS_rf <- confusionMatrix(predictions_test_DFS_rf, test_DFS_data$DFS.Status)
+print(conf_matrix_test_DFS_rf)
+
+# Compare performance for OS.Status models (Logistic Regression vs Random Forest)
+model_comparison_OS_test <- data.frame(
+  Model = c("Logistic Regression", "Random Forest"),
+  Accuracy = c(conf_matrix_test_OS_logistic$overall['Accuracy'], conf_matrix_test_OS_rf$overall['Accuracy']),
+  AUC = c(roc(test_OS_data$OS.Status, predict(model_logistic_OS, newdata = test_OS_data, type = "prob")[, 2])$auc,
+          roc(test_OS_data$OS.Status, predict(model_rf_OS, newdata = test_OS_data, type = "prob")[, 2])$auc)
+)
+print(model_comparison_OS_test)
+
+# Compare performance for DFS.Status models (Logistic Regression vs Random Forest)
+model_comparison_DFS_test <- data.frame(
+  Model = c("Logistic Regression", "Random Forest"),
+  Accuracy = c(conf_matrix_test_DFS_logistic$overall['Accuracy'], conf_matrix_test_DFS_rf$overall['Accuracy']),
+  AUC = c(roc(test_DFS_data$DFS.Status, predict(model_logistic_DFS, newdata = test_DFS_data, type = "prob")[, 2])$auc,
+          roc(test_DFS_data$DFS.Status, predict(model_rf_DFS, newdata = test_DFS_data, type = "prob")[, 2])$auc)
+)
+print(model_comparison_DFS_test)
+
+# OS.Status performance
+ggplot(model_comparison_OS_test, aes(x = Model, y = Accuracy, fill = Model)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Model Comparison - OS.Status", x = "Model", y = "Accuracy")
+
+# DFS.Status performance
+ggplot(model_comparison_DFS_test, aes(x = Model, y = Accuracy, fill = Model)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Model Comparison - DFS.Status", x = "Model", y = "Accuracy")
+
+
