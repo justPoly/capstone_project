@@ -11,6 +11,7 @@ library(knitr)
 library(tidyverse)
 library(pROC)
 library(glmnet)
+library(reshape2)# Melt data for easier plotting
 
 # Load data
 my_data <- read.csv("brain-cancer-dataset.csv")
@@ -460,4 +461,130 @@ ggplot(model_comparison_DFS_test, aes(x = Model, y = Accuracy, fill = Model)) +
   theme_minimal() +
   labs(title = "Model Comparison - DFS.Status", x = "Model", y = "Accuracy")
 
+# Model Tuning to Improve Performance
+# Hyperparameter tuning for Random Forest (DFS.Status)
+tune_rf_DFS <- train(
+  DFS.Status ~ ., 
+  data = train_DFS_data,
+  method = "rf",
+  trControl = train_control,
+  tuneGrid = expand.grid(mtry = seq(2, sqrt(ncol(train_DFS_data)), by = 1))
+)
+
+# Hyperparameter tuning for Random Forest (OS.Status)
+tune_rf_OS <- train(
+  OS.Status ~ ., 
+  data = train_OS_data,
+  method = "rf",
+  trControl = train_control,
+  tuneGrid = expand.grid(mtry = seq(2, sqrt(ncol(train_OS_data)), by = 1))
+)
+
+# Check the best parameters
+print(tune_rf_DFS$bestTune)
+print(tune_rf_OS$bestTune)
+
+# Predictions for DFS.Status
+predictions_rf_DFS_test <- predict(tune_rf_DFS, newdata = test_DFS_data)
+
+# Predictions for OS.Status
+predictions_rf_OS_test <- predict(tune_rf_OS, newdata = test_OS_data)
+
+# DFS.Status Evaluation
+conf_matrix_rf_DFS_test <- confusionMatrix(predictions_rf_DFS_test, test_DFS_data$DFS.Status)
+print(conf_matrix_rf_DFS_test)
+
+# OS.Status Evaluation
+conf_matrix_rf_OS_test <- confusionMatrix(predictions_rf_OS_test, test_OS_data$OS.Status)
+print(conf_matrix_rf_OS_test)
+
+# DFS.Status AUC
+probabilities_rf_DFS_test <- predict(tune_rf_DFS, newdata = test_DFS_data, type = "prob")[, 2]
+roc_rf_DFS_test <- roc(test_DFS_data$DFS.Status, probabilities_rf_DFS_test)
+auc_rf_DFS_test <- auc(roc_rf_DFS_test)
+print(auc_rf_DFS_test)
+
+# OS.Status AUC
+probabilities_rf_OS_test <- predict(tune_rf_OS, newdata = test_OS_data, type = "prob")[, 2]
+roc_rf_OS_test <- roc(test_OS_data$OS.Status, probabilities_rf_OS_test)
+auc_rf_OS_test <- auc(roc_rf_OS_test)
+print(auc_rf_OS_test)
+
+# Compare performance for OS.Status models (Logistic Regression vs Tuned Random Forest)
+model_comparison_OS_test <- data.frame(
+  Model = c("Logistic Regression", "Tuned Random Forest"),
+  Accuracy = c(
+    conf_matrix_test_OS_logistic$overall['Accuracy'], 
+    confusionMatrix(predict(tune_rf_OS, newdata = test_OS_data), test_OS_data$OS.Status)$overall['Accuracy']
+  ),
+  AUC = c(
+    roc(test_OS_data$OS.Status, predict(model_logistic_OS, newdata = test_OS_data, type = "prob")[, 2])$auc,
+    roc(test_OS_data$OS.Status, predict(tune_rf_OS, newdata = test_OS_data, type = "prob")[, 2])$auc
+  )
+)
+print(model_comparison_OS_test)
+
+# Compare performance for DFS.Status models (Logistic Regression vs Tuned Random Forest)
+model_comparison_DFS_test <- data.frame(
+  Model = c("Logistic Regression", "Tuned Random Forest"),
+  Accuracy = c(
+    conf_matrix_test_DFS_logistic$overall['Accuracy'], 
+    confusionMatrix(predict(tune_rf_DFS, newdata = test_DFS_data), test_DFS_data$DFS.Status)$overall['Accuracy']
+  ),
+  AUC = c(
+    roc(test_DFS_data$DFS.Status, predict(model_logistic_DFS, newdata = test_DFS_data, type = "prob")[, 2])$auc,
+    roc(test_DFS_data$DFS.Status, predict(tune_rf_DFS, newdata = test_DFS_data, type = "prob")[, 2])$auc
+  )
+)
+print(model_comparison_DFS_test)
+
+# Prepare data for visualization (OS.Status)
+visualization_data_OS <- data.frame(
+  Model = c("Logistic Regression", "Tuned Random Forest"),
+  Accuracy = c(
+    conf_matrix_test_OS_logistic$overall['Accuracy'], 
+    confusionMatrix(predict(tune_rf_OS, newdata = test_OS_data), test_OS_data$OS.Status)$overall['Accuracy']
+  ),
+  AUC = c(
+    roc(test_OS_data$OS.Status, predict(model_logistic_OS, newdata = test_OS_data, type = "prob")[, 2])$auc,
+    roc(test_OS_data$OS.Status, predict(tune_rf_OS, newdata = test_OS_data, type = "prob")[, 2])$auc
+  )
+)
+
+visualization_data_OS_melted <- melt(visualization_data_OS, id.vars = "Model", variable.name = "Metric", value.name = "Value")
+
+# Plot Accuracy and AUC for OS.Status
+ggplot(visualization_data_OS_melted, aes(x = Model, y = Value, fill = Metric)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Performance Comparison for OS.Status Models",
+       x = "Model",
+       y = "Performance Metric") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+
+# Prepare data for visualization (DFS.Status)
+visualization_data_DFS <- data.frame(
+  Model = c("Logistic Regression", "Tuned Random Forest"),
+  Accuracy = c(
+    conf_matrix_test_DFS_logistic$overall['Accuracy'], 
+    confusionMatrix(predict(tune_rf_DFS, newdata = test_DFS_data), test_DFS_data$DFS.Status)$overall['Accuracy']
+  ),
+  AUC = c(
+    roc(test_DFS_data$DFS.Status, predict(model_logistic_DFS, newdata = test_DFS_data, type = "prob")[, 2])$auc,
+    roc(test_DFS_data$DFS.Status, predict(tune_rf_DFS, newdata = test_DFS_data, type = "prob")[, 2])$auc
+  )
+)
+
+# Melt data for easier plotting
+visualization_data_DFS_melted <- melt(visualization_data_DFS, id.vars = "Model", variable.name = "Metric", value.name = "Value")
+
+# Plot Accuracy and AUC for DFS.Status
+ggplot(visualization_data_DFS_melted, aes(x = Model, y = Value, fill = Metric)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Performance Comparison for DFS.Status Models",
+       x = "Model",
+       y = "Performance Metric") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
 
