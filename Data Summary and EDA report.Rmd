@@ -14,25 +14,43 @@ output:
   knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
   # Load necessary libraries
   library(dplyr)
-  library(ggplot2)
+  library(tidyr)
   library(corrplot)
-  library(caret) 
-  library(stats) 
-  library(tidyverse)
+  library(caret)  # For findCorrelation()
+  library(stats)  # For Chi-square test
+  library(ggplot2)
+  library(tinytex)
+  library(quarto)
   library(knitr)
+  library(tidyverse)
+  library(pROC)
+  library(glmnet)
+  library(reshape2)
 ```
 
 # Import Data
-````{r}
+
+```{r}
      my_data <- read.csv("brain-cancer-dataset.csv")
-````
+```
+
 # **1. Introduction**
 
-This report provides a comprehensive analysis of a brain cancer dataset, with a particular focus on the clinical and genetic data of children diagnosed with brain cancer.  The goal is to prepare the dataset for machine learning models that predict:
+This report provides a comprehensive analysis of a brain cancer dataset, with a particular focus on the clinical and genetic data consisting of mostly children diagnosed with brain cancer.
 
--   **OS.Status (Overall Survival Status):** Whether a patient survived.
+# **Aim and Objectives**
 
--   **DFS.Status (Disease-Free Survival Status):** Whether a patient remained disease-free.
+This research aims to bridge this gap by integrating clinical and genetic data to optimize radiotherapy protocols, creating a shift from generalized treatments to more personalized care.
+
+# The Specific objectives are to:
+
+1.  Curate comprehensive clinical and genetic datasets that represent a diverse range of brain cancer patients.
+
+2.  Develop advanced ML models that incorporate clinical tumor heterogeneity and patient-specific factors, including genetic mutation data, to predict treatment responses.
+
+3.  Validate models using cross-validation and independent cohorts to evaluate their performance and generalizability.
+
+4.  Collaborate with clinical experts to translate model predictions into actionable, personalized radiotherapy protocols that improve patient outcomes and minimize side effects.
 
 Here’s a breakdown of the steps taken:
 
@@ -43,6 +61,14 @@ Here’s a breakdown of the steps taken:
 -   **Number of Records:** 218 patient records.
 -   **Number of Features:** 61 features, including clinical and genetic data.
 -   **Missing Values:** Yes (handled during preprocessing)
+
+The goal is to prepare the dataset for machine learning models that predict:
+
+-   **OS.Status (Overall Survival Status):** Whether a patient survived.
+
+-   **DFS.Status (Disease-Free Survival Status):** Whether a patient remained disease-free.
+
+OS.Status and DFS.Status were identified as the dependent variables (or target variables) for this study because they are clinically meaningful, measurable, and directly influenced by the data available in the dataset. Their prediction aligns with the research goal of improving brain cancer treatment outcomes and supporting healthcare decision-making.
 
 ### 2.2 **Variable Types**
 
@@ -61,7 +87,7 @@ Missing values can disrupt the quality of a dataset. In this case:
 
 -   **Categorical Variables:** Missing values were replaced with "Unknown" for consistency.
 
-`````{r}
+```{r}
 # Handle Missing Values
 my_data <- my_data %>%
   mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .))) %>%
@@ -72,7 +98,7 @@ my_data <- my_data %>%
 if (sum(is.na(my_data)) > 0) {
   stop("Unresolved missing values in the dataset.")
 }
-`````
+```
 
 ### **3.2 Feature Cleaning**
 
@@ -112,7 +138,7 @@ For predictive modeling, there is need to select the most relevant features. Chi
 
 The following categorical variables were selected for analysis, These variables represent distinct groups or categories and will be used to explore their associations with patient prognosis.
 
-````{r}
+```{r}
    # Define categorical columns
 categorical_columns <- c(
   "Study.ID", "Patient.ID", "Sample.ID", "Age.Class", "BRAF_RELA.Status", 
@@ -129,7 +155,7 @@ categorical_columns <- c(
   "Sex", "Surgery", "Treatment", "Treatment.Changed", "Treatment.Status", 
   "Tumor.Location.Condensed", "Tumor.Tissue.Site", "Tumor.Type", "Updated.Grade"
 )
-````
+```
 
 Significant features were identified for both OS.Status and DFS.Status using a Chi-square test.
 
@@ -148,9 +174,9 @@ chi_sq_summary_OS <- do.call(rbind, chi_sq_results_OS)
 significant_features_OS <- chi_sq_summary_OS %>% filter(p_value < 0.05)
 ```
 
-# 4. Key Insights from Exploratory Data Analysis 
+# 4. Key Insights from Exploratory Data Analysis
 
-EDA helps to understand the data and its relationships, providing insights that can guide further analysis and modeling.
+Exploratory Data Analysis helps to understand the data and its relationships, providing insights that can guide further analysis and modeling.
 
 ### **4.1 Target Variable Distribution**
 
@@ -176,7 +202,7 @@ ggplot(my_data, aes(x = DFS.Status, fill = DFS.Status)) +
 
 ### 4.2 Correlation Analysis
 
-A correlation matrix was created to visualize relationships between numerical variables. This helped in understanding how variables relate to each other and where correlations are strong enough to potentially affect model performance. 
+A correlation matrix was created to visualize relationships between numerical variables. This helped in understanding how variables relate to each other and where correlations are strong enough to potentially affect model performance.
 
 A heatmap was used to visualize correlations among numerical variables. Highly correlated features were excluded.
 
@@ -189,7 +215,7 @@ corrplot(cor_matrix, method = "color", tl.cex = 0.8, number.cex = 0.7, addCoef.c
 
 ### 4.3 Selected Features
 
-To summarize the features selected for OS.Status and DFS.Status, we present: - A Bar Plot showing the total number of features selected for each target variable. - A Table listing the features categorized as unique to each target variable or common to both.
+To summarize the features selected for OS.Status and DFS.Status, i present: - A Bar Plot showing the total number of features selected for each target variable. - A Table listing the features categorized as unique to each target variable or common to both.
 
 #### Features for OS.Status & DFS.Status
 
@@ -197,7 +223,7 @@ To summarize the features selected for OS.Status and DFS.Status, we present: - A
 
 The chi-square tests were performed to evaluate the relationship between categorical features and the target variables, OS.Status and DFS.Status. For each feature in the categorical_columns, contingency tables were created between the feature and the target variable. The resulting p-values were computed to assess the statistical significance of each feature in relation to the target variables.
 
-````{r}
+```{r}
 # Chi-square test for OS.Status and DFS.Status
 chi_sq_results_OS <- lapply(categorical_columns, function(col) {
   table_data <- table(my_data[[col]], my_data$OS.Status)
@@ -220,14 +246,13 @@ chi_sq_results_DFS <- lapply(categorical_columns, function(col) {
 })
 
 chi_sq_summary_DFS <- do.call(rbind, chi_sq_results_DFS)
-````
-
+```
 
 **Filtering Significant Features**
 
 Features with p-values less than 0.05 were considered statistically significant and were selected for further analysis. These significant features were extracted from the chi-square test results for both OS.Status and DFS.Status. The dataset was then subset to include only these significant features, resulting in two datasets: data_OS for OS.Status and data_DFS for DFS.Status.
 
-````{r}
+```{r}
 # Filter significant features for OS.Status and DFS.Status
 significant_features_OS <- chi_sq_summary_OS %>% filter(p_value < 0.05)
 significant_features_DFS <- chi_sq_summary_DFS %>% filter(p_value < 0.05)
@@ -235,13 +260,13 @@ significant_features_DFS <- chi_sq_summary_DFS %>% filter(p_value < 0.05)
 # Subset data for significant features
 data_OS <- my_data %>% select(all_of(significant_features_OS$Feature), OS.Status)
 data_DFS <- my_data %>% select(all_of(significant_features_DFS$Feature), DFS.Status)
-````
+```
 
 **Feature Count Summary**
 
 The selected features for OS.Status and DFS.Status were extracted, excluding the target variable itself. A summary was created to report the number of significant features for each target variable, as well as the number of common features between OS.Status and DFS.Status.
 
-````{r}
+```{r}
 # Extract selected features
 selected_features_OS <- colnames(data_OS)[colnames(data_OS) != "OS.Status"]
 selected_features_DFS <- colnames(data_DFS)[colnames(data_DFS) != "DFS.Status"]
@@ -252,7 +277,7 @@ feature_counts <- data.frame(
   Features = c(length(selected_features_OS), length(selected_features_DFS)),
   Common = length(intersect(selected_features_OS, selected_features_DFS))
 )
-````
+```
 
 **Visualization of Selected Features**
 
@@ -278,9 +303,9 @@ To explore the relationship between the selected features for OS.Status and DFS.
 
 The features were categorized as follows:
 
-"Both": Features present in both OS.Status and DFS.Status.
-"OS.Status": Features that are exclusive to OS.Status.
-"DFS.Status": Features that are exclusive to DFS.Status.
+"Both": Features present in both OS.Status and DFS.Status. 
+"OS.Status": Features that are exclusive to OS.Status. 
+"DFS.Status": Features that are exclusive to DFS.Status. 
 The categorized features were then displayed in a table for better visualization and clarity.
 
 ```{r}
@@ -303,9 +328,643 @@ knitr::kable(
 
 # Summary
 
-- Preprocessing: Missing values were handled, column names standardized, and irrelevant features removed.
+-   Preprocessing: Missing values were handled, column names standardized, and irrelevant features removed.
 
-- Feature Selection: Chi-Square tests helped identify the most significant features for predicting OS.Status and DFS.Status.
+-   Feature Selection: Chi-Square tests helped identify the most significant features for predicting OS.Status and DFS.Status.
 
-- Exploratory Data Analysis: Revealed balanced target variable distributions and correlations among features.
-## End
+-   Exploratory Data Analysis: Revealed balanced target variable distributions and correlations among features.
+
+
+# Model Building
+
+## 1. Introduction
+
+The purpose of this study is to evaluate and compare machine learning models for predicting OS.Status and DFS.Status. Two models, Logistic Regression and Random Forest, were selected based on their suitability for classification tasks. Hyperparameter tuning was conducted to enhance the performance of the Random Forest model. Performance metrics, including Accuracy, AUC,Kappa, Sensitivity and Specificity were used to evaluate the models on both training and test datasets.
+
+## 2. Description of Models
+
+### Logistic Regression
+
+Logistic regression is a statistical method used for binary classification tasks. It models the probability of a target variable belonging to a particular class based on one or more predictor variables. This method is interpretable and performs well when the relationship between predictors and the target variable is approximately linear.
+
+Type: Linear model for binary classification.
+
+Objective: Model the relationship between the predictors and the binary outcome variable.
+
+Hyperparameters: Default settings were used as Logistic Regression has limited hyperparameters to tune.
+
+### Random Forest
+
+Random Forest is an ensemble learning method that constructs multiple decision trees during training and outputs the mode of the classes (classification) or the mean prediction (regression). It handles nonlinear relationships effectively and reduces overfitting by averaging predictions across trees.
+
+Type: Ensemble model that constructs multiple decision trees.
+
+Objective: Combine predictions from multiple trees to improve robustness and accuracy.
+
+Hyperparameters: Number of trees (ntree), Maximum features considered for splitting (mtry) and Minimum node size.
+
+## 3. Steps and Code Explanation
+
+### Data Preparation
+
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+```
+
+This ensures that the results of any random operations (like data splitting or model training) can be reproduced. By setting a seed, the random number generator will always produce the same output when you run the code.
+
+
+The dataset is split into two sets for OS.Status and DFS.Status:
+
+-   Training set (80%): For training the model.
+-   Testing set (20%): For testing the model's performance.
+
+createDataPartition: This function is from the caret package and ensures that the partition maintains the same proportion of classes (OS.Status and DFS.Status) as in the original dataset.
+
+```{r}
+# Split the data for OS.Status (80% for training, 20% for testing)
+train_OS <- createDataPartition(data_OS$OS.Status, p = 0.8, list = FALSE)
+train_OS_data <- data_OS[train_OS, ]
+test_OS_data <- data_OS[-train_OS, ]
+
+# Split the data for DFS.Status (80% for training, 20% for testing)
+train_DFS <- createDataPartition(data_DFS$DFS.Status, p = 0.8, list = FALSE)
+train_DFS_data <- data_DFS[train_DFS, ]
+test_DFS_data <- data_DFS[-train_DFS, ]
+```
+
+-   **Column Filtering**: Identify and removes columns with only one level to avoid redundant predictors.
+
+```{r}
+# Identify and remove columns with only one level
+single_level_factors <- sapply(train_OS_data, function(x) is.factor(x) && length(unique(x)) == 1)
+single_level_columns <- names(single_level_factors[single_level_factors])
+train_OS_data <- train_OS_data[, !colnames(train_OS_data) %in% single_level_columns]
+
+# Identify and Remove columns with only one level (factor columns)
+single_level_factors_DFS <- sapply(train_DFS_data, function(x) is.factor(x) && length(unique(x)) == 1)
+single_level_columns_DFS <- names(single_level_factors_DFS[single_level_factors_DFS])
+train_DFS_data <- train_DFS_data[, !colnames(train_DFS_data) %in% single_level_columns_DFS]
+```
+
+Training control was set up to define the resampling method for model training. Here, cross-validation with 10 folds (cv, number = 10) is used to assess model performance.
+
+```{r}
+# Set up the training control for OS.Status
+train_control <- trainControl(method = "cv", number = 10)
+
+# Set up the training control for DFS.Status
+train_control_DFS <- trainControl(method = "cv", number = 10)
+```
+
+Here, a logistic regression model training was conducted (method = "glm", family = "binomial") to predict OS.Status and DFS.Status from all other variables (OS.Status \~ .) and (DFS.Status \~ .).
+
+```{r}
+# Train the logistic regression model
+model_logistic_OS <- train(OS.Status ~ ., data = train_OS_data, method = "glm", family = "binomial", trControl = train_control)
+
+# Train the logistic regression model for DFS.Status
+model_logistic_DFS <- train(DFS.Status ~ ., data = train_DFS_data, method = "glm", family = "binomial", trControl = train_control_DFS)
+```
+
+
+```{r}
+# Check model summary
+# summary(model_logistic_OS)
+
+# Check model summary for DFS.Status
+# summary(model_logistic_DFS)
+```
+
+```{r}
+# Predict on the training data for OS.Status
+predictions_train <- predict(model_logistic_OS, newdata = train_OS_data)
+
+# Predict on the training data for DFS.Status
+predictions_train_DFS <- predict(model_logistic_DFS, newdata = train_DFS_data)
+```
+## Model Performance
+
+The model's performance on the training data was evaluated by comparing predicted values (predictions_train) with the actual OS.Status and DFS.Status.
+
+```{r}
+# Confusion matrix to evaluate performance on training data for DFS.Status
+conf_matrix_train <- confusionMatrix(predictions_train, train_OS_data$OS.Status)
+print(conf_matrix_train)
+
+# Confusion matrix to evaluate performance on training data for DFS.Status
+conf_matrix_train_DFS <- confusionMatrix(predictions_train_DFS, train_DFS_data$DFS.Status)
+print(conf_matrix_train_DFS)
+```
+
+
+```{r}
+# Predict on the test data for OS.Status
+predictions_test <- predict(model_logistic_OS, newdata = test_OS_data)
+
+# Predict on the test data for DFS.Status
+predictions_test_DFS <- predict(model_logistic_DFS, newdata = test_DFS_data)
+```
+
+The model's performance on the test data was also evaluated to provide more detailed insight into the model's classification accuracy.
+```{r}
+# Confusion matrix to evaluate performance on the test data for OS.Status
+conf_matrix_test <- confusionMatrix(predictions_test, test_OS_data$OS.Status)
+print(conf_matrix_test)
+
+# Confusion matrix to evaluate performance on test data for DFS.Status
+conf_matrix_test_DFS <- confusionMatrix(predictions_test_DFS, test_DFS_data$DFS.Status)
+print(conf_matrix_test_DFS)
+```
+
+### Feature Importance
+
+This shows the importance of each feature (predictor variable) in the logistic regression model. A higher score means the feature is more important for the model's prediction.
+
+```{r}
+# Feature importance for OS.Status
+feature_importance <- varImp(model_logistic_OS, scale = FALSE)
+
+# Feature importance for DFS.Status
+feature_importance_DFS <- varImp(model_logistic_DFS, scale = FALSE)
+```
+
+
+```{r}
+# Print feature importance for OS.Status
+print(feature_importance)
+
+# Print feature importance for DFS.Status
+print(feature_importance_DFS)
+```
+
+```{r}
+# Cross-validation results for OS.Status
+cv_results <- model_logistic_OS$resample
+print(cv_results)
+
+# Cross-validation results for DFS.Status
+cv_results_DFS <- model_logistic_DFS$resample
+print(cv_results_DFS)
+```
+
+```{r}
+# Plot cross-validation results
+  ggplot(cv_results, aes(x = Resample, y = Accuracy)) +
+  geom_boxplot() +
+  labs(title = "Cross-validation Results - Accuracy (OS.Status)", y = "Accuracy", x = "Fold") +
+  theme_minimal()
+
+# Plot cross-validation results for DFS.Status
+ggplot(cv_results_DFS, aes(x = Resample, y = Accuracy)) +
+  geom_boxplot() +
+  labs(title = "Cross-validation Results - Accuracy (DFS.Status)", y = "Accuracy", x = "Fold") +
+  theme_minimal()
+```
+
+```{r}
+# Get predicted probabilities for OS.Status (needed for ROC curve)
+probabilities <- predict(model_logistic_OS, newdata = train_OS_data, type = "prob")[, 2]
+
+# Get predicted probabilities for DFS.Status (needed for ROC curve)
+probabilities_DFS <- predict(model_logistic_DFS, newdata = train_DFS_data, type = "prob")[, 2]
+```
+
+```{r}
+# ROC curve and AUC for OS.Status
+roc_curve <- roc(train_OS_data$OS.Status, probabilities)
+plot(roc_curve, main = "ROC Curve for OS.Status", col = "blue")
+auc(roc_curve)  # This will give you the AUC value
+
+# ROC curve and AUC for DFS.Status
+roc_curve_DFS <- roc(train_DFS_data$DFS.Status, probabilities_DFS)
+plot(roc_curve_DFS, main = "ROC Curve for DFS.Status", col = "blue")
+auc(roc_curve_DFS)  # This will give you the AUC value
+```
+
+### Logistic Regression Model Tuning
+```{r}
+# hyperparameter tuning for OS.Status logistic regression using `caret`
+tune_grid <- expand.grid(alpha = 0:1, lambda = seq(0, 1, by = 0.1))
+model_tuned <- train(OS.Status ~ ., data = train_OS_data, method = "glmnet", 
+                     trControl = train_control, tuneGrid = tune_grid, family = "binomial")
+
+# Hyperparameter tuning for DFS.Status using glmnet
+tune_grid_DFS <- expand.grid(alpha = 0:1, lambda = seq(0, 1, by = 0.1))
+model_tuned_DFS <- train(DFS.Status ~ ., data = train_DFS_data, method = "glmnet", 
+                         trControl = train_control_DFS, tuneGrid = tune_grid_DFS, family = "binomial")
+```
+
+```{r}
+# Save the final model for later use
+saveRDS(model_logistic_OS, "model_logistic_OS.rds")
+
+# Save the final DFS.Status model
+saveRDS(model_logistic_DFS, "model_logistic_DFS.rds")
+```
+
+```{r}
+# Train Random Forest model for OS.Status
+model_rf_OS <- train(OS.Status ~ ., data = train_OS_data, method = "rf", trControl = train_control)
+
+# Train Random Forest model for DFS.Status
+model_rf_DFS <- train(DFS.Status ~ ., data = train_DFS_data, method = "rf", trControl = train_control)
+```
+
+```{r}
+# Check model summary for Random Forest
+summary(model_rf_OS)
+
+# Check model summary for Random Forest
+summary(model_rf_DFS)
+```
+
+```{r}
+# Get model evaluation results for Random Forest
+print(model_rf_OS)
+
+# Get model evaluation results for Random Forest
+print(model_rf_DFS)
+```
+
+```{r}
+# Predict on the training data (or test data) for OS.Status
+predictions_rf_OS <- predict(model_rf_OS, newdata = train_OS_data)
+
+# Predict on the training data (or test data) for DFS.Status
+predictions_rf_DFS <- predict(model_rf_DFS, newdata = train_DFS_data)
+```
+
+```{r}
+# Confusion matrix to evaluate Random Forest performance for OS.Status
+conf_matrix_rf_OS <- confusionMatrix(predictions_rf_OS, train_OS_data$OS.Status)
+print(conf_matrix_rf_OS)
+
+# Confusion matrix to evaluate Random Forest performance for DFS.Status
+conf_matrix_rf_DFS <- confusionMatrix(predictions_rf_DFS, train_DFS_data$DFS.Status)
+print(conf_matrix_rf_DFS)
+```
+
+```{r}
+# OS.Status Cross-validation results for Random Forest
+cv_results_rf <- model_rf_OS$resample
+print(cv_results_rf)
+
+# DFS.Status Cross-validation results for Random Forest
+cv_results_rf_DFS <- model_rf_DFS$resample
+print(cv_results_rf_DFS)
+```
+
+```{r}
+# Plot cross-validation results for Random Forest for OS.Status
+ggplot(cv_results_rf, aes(x = Resample, y = Accuracy)) +
+  geom_boxplot() +
+  labs(title = "Cross-validation Results - Accuracy (Random Forest for OS)", y = "Accuracy", x = "Fold") +
+  theme_minimal()
+
+# Plot cross-validation results for Random Forest for DFS.Status
+ggplot(cv_results_rf_DFS, aes(x = Resample, y = Accuracy)) +
+  geom_boxplot() +
+  labs(title = "Cross-validation Results - Accuracy (Random Forest for DFS)", y = "Accuracy", x = "Fold") +
+  theme_minimal()
+```
+
+Here, i calculated the ROC (Receiver Operating Characteristic) curve and AUC (Area Under the Curve) to evaluate how well the models distinguish between classes. See Code below:
+
+```{r}
+# ROC curve and AUC for Random Forest
+probabilities_rf <- predict(model_rf_OS, newdata = train_OS_data, type = "prob")[, 2]
+roc_curve_rf <- roc(train_OS_data$OS.Status, probabilities_rf)
+plot(roc_curve_rf, main = "ROC Curve for OS.Status (Random Forest)", col = "blue")
+auc(roc_curve_rf)  # This will give you the AUC value
+
+# ROC curve and AUC for Random Forest
+probabilities_rf_DFS <- predict(model_rf_DFS, newdata = train_DFS_data, type = "prob")[, 2]
+roc_curve_rf_DFS <- roc(train_DFS_data$DFS.Status, probabilities_rf_DFS)
+plot(roc_curve_rf_DFS, main = "ROC Curve for DFS.Status (Random Forest)", col = "blue")
+auc(roc_curve_rf_DFS)  # This will give you the AUC value
+```
+
+### Model Comparison - Logistic Regression vs Random Forest
+```{r}
+# Compare Logistic Regression and Random Forest for OS.Status
+model_comparison_OS <- data.frame(
+  Model = c("Logistic Regression", "Random Forest"),
+  Accuracy = c(conf_matrix_test$overall['Accuracy'], conf_matrix_rf_OS$overall['Accuracy']),
+  AUC = c(auc(roc_curve), auc(roc_curve_rf))
+)
+
+print(model_comparison_OS)
+
+# Compare Logistic Regression and Random Forest for DFS.Status
+model_comparison_DFS <- data.frame(
+  Model = c("Logistic Regression", "Random Forest"),
+  Accuracy = c(conf_matrix_train_DFS$overall['Accuracy'], conf_matrix_rf_DFS$overall['Accuracy']),
+  AUC = c(auc(roc_curve_DFS), auc(roc_curve_rf_DFS))
+)
+
+print(model_comparison_DFS)
+```
+
+Lets evaluates the Logistic Regression model on the test data for OS.Status.
+
+```{r}
+# Predictions on the test data for OS.Status (Logistic Regression)
+predictions_test_OS_logistic <- predict(model_logistic_OS, newdata = test_OS_data)
+conf_matrix_test_OS_logistic <- confusionMatrix(predictions_test_OS_logistic, test_OS_data$OS.Status)
+print(conf_matrix_test_OS_logistic)
+```
+
+Lets evaluates the Random Forest model on the test data for OS.Status.
+
+```{r}
+# Predictions on the test data for OS.Status (Random Forest)
+predictions_test_OS_rf <- predict(model_rf_OS, newdata = test_OS_data)
+conf_matrix_test_OS_rf <- confusionMatrix(predictions_test_OS_rf, test_OS_data$OS.Status)
+print(conf_matrix_test_OS_rf)
+```
+
+Lets evaluates the Logistic Regression model on the test data for DFS.Status.
+
+```{r}
+# Predictions on the test data for DFS.Status (Logistic Regression)
+predictions_test_DFS_logistic <- predict(model_logistic_DFS, newdata = test_DFS_data)
+conf_matrix_test_DFS_logistic <- confusionMatrix(predictions_test_DFS_logistic, test_DFS_data$DFS.Status)
+print(conf_matrix_test_DFS_logistic)
+```
+
+Lets evaluates the Random Forest model on the test data for DFS.Status.
+
+```{r}
+# Predictions on the test data for DFS.Status (Random Forest)
+predictions_test_DFS_rf <- predict(model_rf_DFS, newdata = test_DFS_data)
+conf_matrix_test_DFS_rf <- confusionMatrix(predictions_test_DFS_rf, test_DFS_data$DFS.Status)
+print(conf_matrix_test_DFS_rf)
+```
+
+```{r}
+# Compare performance for OS.Status models (Logistic Regression vs Random Forest)
+model_comparison_OS_test <- data.frame(
+  Model = c("Logistic Regression", "Random Forest"),
+  Accuracy = c(conf_matrix_test_OS_logistic$overall['Accuracy'], conf_matrix_test_OS_rf$overall['Accuracy']),
+  AUC = c(roc(test_OS_data$OS.Status, predict(model_logistic_OS, newdata = test_OS_data, type = "prob")[, 2])$auc,
+          roc(test_OS_data$OS.Status, predict(model_rf_OS, newdata = test_OS_data, type = "prob")[, 2])$auc)
+)
+print(model_comparison_OS_test)
+```
+
+```{r}
+# Compare performance for DFS.Status models (Logistic Regression vs Random Forest)
+model_comparison_DFS_test <- data.frame(
+  Model = c("Logistic Regression", "Random Forest"),
+  Accuracy = c(conf_matrix_test_DFS_logistic$overall['Accuracy'], conf_matrix_test_DFS_rf$overall['Accuracy']),
+  AUC = c(roc(test_DFS_data$DFS.Status, predict(model_logistic_DFS, newdata = test_DFS_data, type = "prob")[, 2])$auc,
+          roc(test_DFS_data$DFS.Status, predict(model_rf_DFS, newdata = test_DFS_data, type = "prob")[, 2])$auc)
+)
+print(model_comparison_DFS_test)
+```
+
+```{r}
+# OS.Status performance
+ggplot(model_comparison_OS_test, aes(x = Model, y = Accuracy, fill = Model)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Model Comparison - OS.Status", x = "Model", y = "Accuracy")
+
+# DFS.Status performance
+ggplot(model_comparison_DFS_test, aes(x = Model, y = Accuracy, fill = Model)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Model Comparison - DFS.Status", x = "Model", y = "Accuracy")
+```
+
+### Random Forest Model Tuning
+
+```{r}
+# Hyperparameter tuning for Random Forest (DFS.Status)
+tune_rf_DFS <- train(
+  DFS.Status ~ ., 
+  data = train_DFS_data,
+  method = "rf",
+  trControl = train_control,
+  tuneGrid = expand.grid(mtry = seq(2, sqrt(ncol(train_DFS_data)), by = 1))
+)
+
+# Hyperparameter tuning for Random Forest (OS.Status)
+tune_rf_OS <- train(
+  OS.Status ~ ., 
+  data = train_OS_data,
+  method = "rf",
+  trControl = train_control,
+  tuneGrid = expand.grid(mtry = seq(2, sqrt(ncol(train_OS_data)), by = 1))
+)
+```
+
+```{r}
+# Check the best parameters
+print(tune_rf_DFS$bestTune)
+print(tune_rf_OS$bestTune)
+```
+
+```{r}
+# Predictions for DFS.Status
+predictions_rf_DFS_test <- predict(tune_rf_DFS, newdata = test_DFS_data)
+
+# Predictions for OS.Status
+predictions_rf_OS_test <- predict(tune_rf_OS, newdata = test_OS_data)
+```
+
+```{r}
+# DFS.Status Evaluation
+conf_matrix_rf_DFS_test <- confusionMatrix(predictions_rf_DFS_test, test_DFS_data$DFS.Status)
+print(conf_matrix_rf_DFS_test)
+```
+
+```{r}
+# OS.Status Evaluation
+conf_matrix_rf_OS_test <- confusionMatrix(predictions_rf_OS_test, test_OS_data$OS.Status)
+print(conf_matrix_rf_OS_test)
+```
+
+```{r}
+# DFS.Status AUC
+probabilities_rf_DFS_test <- predict(tune_rf_DFS, newdata = test_DFS_data, type = "prob")[, 2]
+roc_rf_DFS_test <- roc(test_DFS_data$DFS.Status, probabilities_rf_DFS_test)
+auc_rf_DFS_test <- auc(roc_rf_DFS_test)
+print(auc_rf_DFS_test)
+```
+
+```{r}
+# OS.Status AUC
+probabilities_rf_OS_test <- predict(tune_rf_OS, newdata = test_OS_data, type = "prob")[, 2]
+roc_rf_OS_test <- roc(test_OS_data$OS.Status, probabilities_rf_OS_test)
+auc_rf_OS_test <- auc(roc_rf_OS_test)
+print(auc_rf_OS_test)
+```
+
+```{r}
+# Compare performance for OS.Status models (Logistic Regression vs Tuned Random Forest)
+model_comparison_OS_test <- data.frame(
+  Model = c("Logistic Regression", "Tuned Random Forest"),
+  Accuracy = c(
+    conf_matrix_test_OS_logistic$overall['Accuracy'], 
+    confusionMatrix(predict(tune_rf_OS, newdata = test_OS_data), test_OS_data$OS.Status)$overall['Accuracy']
+  ),
+  AUC = c(
+    roc(test_OS_data$OS.Status, predict(model_logistic_OS, newdata = test_OS_data, type = "prob")[, 2])$auc,
+    roc(test_OS_data$OS.Status, predict(tune_rf_OS, newdata = test_OS_data, type = "prob")[, 2])$auc
+  )
+)
+print(model_comparison_OS_test)
+```
+
+```{r}
+# Compare performance for DFS.Status models (Logistic Regression vs Tuned Random Forest)
+model_comparison_DFS_test <- data.frame(
+  Model = c("Logistic Regression", "Tuned Random Forest"),
+  Accuracy = c(
+    conf_matrix_test_DFS_logistic$overall['Accuracy'], 
+    confusionMatrix(predict(tune_rf_DFS, newdata = test_DFS_data), test_DFS_data$DFS.Status)$overall['Accuracy']
+  ),
+  AUC = c(
+    roc(test_DFS_data$DFS.Status, predict(model_logistic_DFS, newdata = test_DFS_data, type = "prob")[, 2])$auc,
+    roc(test_DFS_data$DFS.Status, predict(tune_rf_DFS, newdata = test_DFS_data, type = "prob")[, 2])$auc
+  )
+)
+print(model_comparison_DFS_test)
+```
+
+```{r}
+# Prepare data for visualization (OS.Status)
+visualization_data_OS <- data.frame(
+  Model = c("Logistic Regression", "Tuned Random Forest"),
+  Accuracy = c(
+    conf_matrix_test_OS_logistic$overall['Accuracy'], 
+    confusionMatrix(predict(tune_rf_OS, newdata = test_OS_data), test_OS_data$OS.Status)$overall['Accuracy']
+  ),
+  AUC = c(
+    roc(test_OS_data$OS.Status, predict(model_logistic_OS, newdata = test_OS_data, type = "prob")[, 2])$auc,
+    roc(test_OS_data$OS.Status, predict(tune_rf_OS, newdata = test_OS_data, type = "prob")[, 2])$auc
+  )
+)
+
+visualization_data_OS_melted <- melt(visualization_data_OS, id.vars = "Model", variable.name = "Metric", value.name = "Value")
+```
+
+```{r}
+# Plot Accuracy and AUC for OS.Status
+ggplot(visualization_data_OS_melted, aes(x = Model, y = Value, fill = Metric)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Performance Comparison for OS.Status Models",
+       x = "Model",
+       y = "Performance Metric") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+```
+
+## Key Metrics for Evaluation
+
+Performance metrics such as accuracy, AUC (Area Under the Curve), Kappa, sensitivity, and specificity provide a comprehensive view of how well the models distinguish between classes and handle classification tasks. Let’s discuss these metrics in the context of the OS.Status (Overall Survival) and DFS.Status (Disease-Free Survival) tasks.
+
+### a. Accuracy
+
+Accuracy is the proportion of correct predictions to the total number of predictions. While it is easy to interpret, it can be misleading for imbalanced datasets.
+
+### OS.Status:
+
+Logistic Regression: \~72.1% 
+Random Forest: \~88.4% 
+
+**Discussion:** Random Forest significantly outperformed Logistic Regression, indicating that it better captured the complexities in the data. Logistic Regression's performance reflects limitations in modeling nonlinear relationships.
+
+### DFS.Status:
+
+Logistic Regression: \~90.5% 
+Random Forest: \~95.2%
+
+**Discussion:** Both models performed well, but Random Forest showed a clear advantage. High accuracy in DFS.Status suggests that the dataset may have been easier to classify.
+
+### b. Area Under the Curve (AUC)
+
+AUC measures the ability of the model to distinguish between classes across all thresholds. A higher AUC indicates better discrimination.
+
+### OS.Status:
+
+-   Logistic Regression: \~0.716
+-   Random Forest: \~0.932
+
+**Discussion:** Random Forest's higher AUC demonstrates its superior ability to correctly classify positive and negative cases, even under class imbalance.
+
+### DFS.Status:
+
+-   Logistic Regression: \~0.882
+-   Random Forest: \~0.980
+
+**Discussion:** The high AUC values for both models show they are effective at distinguishing between Disease-Free and Recurred/Progressed cases. Random Forest outperformed Logistic Regression, confirming its robustness in classification tasks.
+
+### c. Kappa
+
+Kappa evaluates agreement between predicted and actual labels beyond chance. It is particularly useful for imbalanced datasets.
+
+### OS.Status:
+
+-   Logistic Regression: Moderate Kappa (\~0.32)
+-   Random Forest: Substantial Kappa (\~0.78)
+
+**Discussion:** Random Forest showed much stronger agreement with the true labels, highlighting its ability to model complex relationships.
+
+### DFS.Status:
+
+-   Logistic Regression: Strong Kappa (\~0.74)
+-   Random Forest: Very strong Kappa (\~0.81)
+
+**Discussion:** Both models performed well, but Random Forest provided better classification consistency.
+
+### d. Sensitivity and Specificity
+
+**Sensitivity (Recall):** The ability to identify true positives.
+
+**Specificity:** The ability to identify true negatives.
+
+### OS.Status:
+
+**Logistic Regression:** Lower sensitivity and specificity compared to Random Forest. Random Forest: High and balanced sensitivity and specificity, ensuring reliable classification for both classes.
+
+### DFS.Status:
+
+**Logistic Regression:** Strong but slightly less balanced than Random Forest. Random Forest: Consistently high sensitivity and specificity, ensuring both Disease-Free and Recurred/Progressed cases were well-classified.
+
+## 5. Discussion of Results
+
+### Strengths of Random Forest:
+
+**Better Handling of Complexity:** Random Forest's ability to model nonlinear relationships and interactions contributed to its superior performance in both tasks. Robustness: Higher accuracy, AUC, and Kappa indicate that Random Forest generalized better across different data splits and handled imbalances more effectively.
+
+### Strengths of Logistic Regression:
+
+**Simplicity and Interpretability:** Logistic Regression is simpler to implement and interpret, making it valuable for understanding feature contributions. Baseline Performance: Despite being linear, it achieved decent results, especially in the DFS.Status task, where the dataset may have been less complex.
+
+### Limitations:
+
+Logistic Regression struggled with the OS.Status task, likely due to its inability to capture nonlinear relationships. Random Forest, while high-performing, might require careful tuning to avoid overfitting and improve generalizability further.
+
+## Conclusion
+
+-   Random Forest Model demonstrated significantly higher accuracy compared to Logistic Regression for predicting OS.Status and DFS.Status.
+-   Accuracy on Training Data (OS.Status): 88.4%; Test Data: 88.4%.
+-   Accuracy on Training Data (DFS.Status): 95.2%; Test Data: 95.2%.
+-   AUC on Test Data (OS.Status): 0.932; DFS.Status: 0.980.
+-   The close alignment between training and test accuracies indicates that the model is neither underfitting nor overfitting, showcasing its robustness and generalizability.
+
+## 6. Health Insight
+
+-   Tumor Grade, Tumor Type, and Tumor Location (in that order) are the most important variables in predicting Overall Survival (OS.Status).
+
+-   Patients with a Tumor Grade above III and specific genetic mutations (e.g., BRAF or CTNNB1 positive) are at higher risk of poor outcomes and should be prioritized for aggressive interventions.
+
+-   Patients with Disease-Free Survival (DFS.Status) predictions showing high-risk recurrence patterns should undergo more frequent follow-ups and consider adjuvant therapies.
+
+-   The Random Forest model significantly outperforms Logistic Regression in terms of accuracy and AUC for both OS.Status and DFS.Status.
+
+-   The Random Forest model is 16% more accurate in identifying high-risk and low-risk patients and will enable better clinical decision-making and resource allocation.
